@@ -1,5 +1,10 @@
 # Unofficial Nitter scraper
 
+
+This is a forked library for individual purpose some missing features, to use full-fledged version refer to:
+https://github.com/bocchilorenzo/ntscraper
+
+
 This is a simple library to scrape Nitter instances for tweets. It can:
 
 - search and scrape tweets with a certain term
@@ -13,12 +18,6 @@ This is a simple library to scrape Nitter instances for tweets. It can:
 If the instance to use is not provided to the scraper, it will use a random public instance. If you can, please host your own instance in order to avoid overloading the public ones and letting Nitter stay alive for everyone. You can read more about that here: https://github.com/zedeus/nitter#installation.
 
 ---
-
-## Installation
-
-```
-pip install ntscraper
-```
 
 ## How to use
 
@@ -100,7 +99,3 @@ Returns a random Nitter instance.
 ## Note
 
 Due to recent changes on Twitter's side, some Nitter instances may not work properly even if they are marked as "working" on Nitter's wiki. If you have trouble scraping with a certain instance, try changing it and check if the problem persists.
-
-## To do list
-
-- [ ] Add scraping of individual posts with comments

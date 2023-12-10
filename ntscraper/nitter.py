@@ -9,7 +9,6 @@ from re import match, sub
 from datetime import datetime
 import logging
 from logging.handlers import QueueHandler
-from multiprocessing import Pool, Queue, cpu_count
 from sys import stdout
 from tqdm import tqdm
 
@@ -19,11 +18,6 @@ logging.basicConfig(
     datefmt="%d-%b-%y %H:%M:%S",
     handlers=[logging.StreamHandler(stdout)],
 )
-
-log_queue = Queue()
-log_handler = QueueHandler(log_queue)
-root_logger = logging.getLogger()
-root_logger.addHandler(log_handler)
 
 valid_filters = [
     "nativeretweets",
@@ -894,32 +888,22 @@ class Nitter:
                 instance,
             )
         else:
-            if len(terms) > cpu_count():
-                raise ValueError(
-                    f"Too many terms. Maximum number of terms is {cpu_count()}"
-                )
+            term = sub(r"[^A-Za-z0-9_+-:]", " ", terms[0]).replace("  ", " ").strip()
 
-            args = [
-                (
-                    sub(r"[^A-Za-z0-9_+-:]", " ", term).replace("  ", " ").strip(),
-                    mode,
-                    number,
-                    since,
-                    until,
-                    near,
-                    language,
-                    to,
-                    filters,
-                    exclude,
-                    max_retries,
-                    instance,
-                )
-                for term in terms
-            ]
-            with Pool(len(terms)) as p:
-                results = list(p.map(self._search_dispatch, args))
-
-            return results
+            return self._search(
+                term,
+                mode,
+                number,
+                since,
+                until,
+                near,
+                language,
+                to,
+                filters,
+                exclude,
+                max_retries,
+                instance,
+            )
 
     def get_profile_info(self, username, max_retries=5, instance=None):
         """
