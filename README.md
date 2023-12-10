@@ -1,7 +1,9 @@
 # Unofficial Nitter scraper
 
 
-This is a forked library for individual purpose some missing features, to use full-fledged version refer to:
+This is a forked library for individual purpose with some missing features.
+
+To use full-fledged version refer to:
 https://github.com/bocchilorenzo/ntscraper
 
 
@@ -99,3 +101,13 @@ Returns a random Nitter instance.
 ## Note
 
 Due to recent changes on Twitter's side, some Nitter instances may not work properly even if they are marked as "working" on Nitter's wiki. If you have trouble scraping with a certain instance, try changing it and check if the problem persists.
+
+# Added features in this fork
+
+- For Tweets:
+    - Removed pools and queues to enable Serverless Deployments
+- For Customized Responses:
+    - If an account is suspended, the returned message in response is: "Account is suspended"
+    - If an account is protected, the returned message in response is: "Account is protected"
+    - If an account doesn't have tweets in the specified duration, the returned message is: "Account does not have tweets"
+    - Otherwise, the returned message is: "Account does not exist"

@@ -182,14 +182,25 @@ class Nitter:
             )
         ):
             if soup.find("div", class_="error-panel"):
-                message = (
-                    f"Fetching error: "
-                    + soup.find("div", class_="error-panel").find("span").text.strip()
-                )
+                if "suspended" in soup.find("div", class_="error-panel").find("span").text.strip():
+                    message = (
+                        f"Account is suspended"
+                    )
+                else:
+                    message = (
+                        f"Fetching error: "
+                        + soup.find("div", class_="error-panel").find("span").text.strip()
+                    )
             else:
-                message = f"Empty page on {self.instance}"
+                if soup.find("div", class_="timeline-header timeline-protected"):
+                    message = "Account is protected"
+                else:
+                    message = f"Empty page on {self.instance}"
             logging.warning(message)
-            soup = None
+            soup = BeautifulSoup(
+                f"<div class='error-item'><span>{message}</span></div>",
+                "lxml",
+            )
         return soup
 
     def _get_page(self, endpoint, max_retries=5):
@@ -234,7 +245,7 @@ class Nitter:
                 keep_trying = False
             else:
                 soup = self._check_error_page(soup)
-                if soup is None:
+                if soup.find("div", class_="error-item"):
                     keep_trying = False
                 else:
                     if self.retry_count == max_retries // 2:
@@ -740,8 +751,27 @@ class Nitter:
 
         soup = self._get_page(endpoint, max_retries)
 
-        if soup is None:
-            return tweets
+        if soup.find("div", class_="error-item"):
+            if "Account is protected" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Account {term} is protected. Try again with a different account."
+                )
+                return {"message": "Account is protected", "tweets": []}
+            elif "Account is suspended" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Account {term} is suspended. Try again with a different account."
+                )
+                return {"message": "Account is suspended", "tweets": []}
+            elif "Empty page" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Account {term} does not have any tweets."
+                )
+                return {"message": "Account does not have tweets", "tweets": []}
+            else:
+                logging.warning(
+                    f"Error getting {term}. Try again with a different account."
+                )
+                return {"message": "Account does not exist", "tweets": []}
 
         is_encrypted = self._is_instance_encrypted()
 
