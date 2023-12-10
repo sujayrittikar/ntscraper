@@ -1,7 +1,7 @@
 # Unofficial Nitter scraper
 
 
-This is a forked library for individual purpose with some missing features.
+This is a forked repository for individual purpose with some missing features.
 
 To use full-fledged version refer to:
 https://github.com/bocchilorenzo/ntscraper
