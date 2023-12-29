@@ -1,3 +1,4 @@
+import time
 import requests
 from bs4 import BeautifulSoup
 import random
@@ -100,10 +101,14 @@ class Nitter:
         if soup is None:
             raise ValueError("Invalid instance")
 
+        profile_avatar = soup.find("a", class_="profile-card-avatar")
+        if profile_avatar is None:
+            return False
+
         if (
-            soup.find("a", class_="profile-card-avatar").find("img")
+            profile_avatar.find("img")
             and "/enc/"
-            in soup.find("a", class_="profile-card-avatar").find("img")["src"]
+            in profile_avatar.find("img")["src"]
         ):
             return True
         else:
@@ -203,7 +208,54 @@ class Nitter:
             )
         return soup
 
-    def _get_page(self, endpoint, max_retries=5):
+    def check_for_errors(self, soup, term):
+        if soup.find("div", class_="error-item"):
+            if "Account is protected" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Account {term} is protected. Try again with a different account."
+                )
+                return {"message": "Account is protected", "tweets": []}
+            elif "Account is suspended" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Account {term} is suspended. Try again with a different account."
+                )
+                return {"message": "Account is suspended", "tweets": []}
+            elif "Empty page" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Account {term} does not have any tweets."
+                )
+                return {"message": "Account does not have tweets", "tweets": []}
+            elif "Tweet not found" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Tweet {term} not found."
+                )
+                return {"message": "Tweet not found", "tweets": []}
+            elif "not found" in soup.find("div", class_="error-item").text:
+                logging.warning(
+                    f"Account {term} not found."
+                )
+                return {"message": "Account not found", "tweets": []}
+            else:
+                logging.warning(
+                    f"Error getting {term}. Try again with a different account."
+                )
+                return {"message": "Error getting Account", "tweets": []}
+        elif soup.find("div", class_="error-panel"):
+            if "not found" in soup.find("div", class_="error-panel").text:
+                logging.warning(
+                    f"Account {term} not found."
+                )
+                return {"message": "Account not found", "tweets": []}
+            else:
+                logging.warning(
+                    f"Error getting {term}. Try again with a different account."
+                )
+                return {"message": "Error getting Account", "tweets": []}
+        
+        return None
+
+
+    def _get_page(self, endpoint, max_retries=5, params=None):
         """
         Download page from Nitter instance
 
@@ -219,6 +271,7 @@ class Nitter:
                     self.instance + endpoint,
                     cookies={"hlsPlayback": "on", "infiniteScroll": ""},
                     timeout=10,
+                    params=params
                 )
             except:
                 if self.retry_count == max_retries // 2:
@@ -669,6 +722,8 @@ class Nitter:
         exclude,
         max_retries,
         instance,
+        max_scraping_time = None,
+        no_search_mode = False,
     ):
         """
         Scrape the specified search terms from Nitter
@@ -688,12 +743,20 @@ class Nitter:
         :return: dictionary of tweets and threads for the term.
         """
         tweets = {"tweets": [], "threads": []}
+
+        if not no_search_mode:
+            self._initialize_session(instance)
+            test_search_endpoint = "/search?f=tweets&q="
+            test_soup = self._get_page(test_search_endpoint, max_retries)
+            if test_soup.find("h2", class_="timeline-none"):
+                return {"message": "Unable to search user", "tweets": []}
+
         if mode == "hashtag":
             endpoint = "/search?f=tweets&q=%23" + term
         elif mode == "term":
             endpoint = "/search?f=tweets&q=" + term
         elif mode == "user":
-            if since or until:
+            if (since or until) and not no_search_mode:
                 endpoint = f"/{term}/search?f=tweets&q="
             else:
                 endpoint = f"/{term}"
@@ -703,26 +766,28 @@ class Nitter:
         self._initialize_session(instance)
 
         if language:
-            endpoint += f"+lang%3A{language}"
+            if not no_search_mode:
+                endpoint += f"+lang%3A{language}"
 
         if to:
             endpoint += f"+to%3A{to}"
 
-        if since:
-            if self._check_date_validity(since):
-                endpoint += f"&since={since}"
-            else:
-                raise ValueError(
-                    "Invalid 'since' date. Use the YYYY-MM-DD format and make sure the date is valid."
-                )
+        if not no_search_mode:
+            if since:
+                if self._check_date_validity(since):
+                    endpoint += f"&since={since}"
+                else:
+                    raise ValueError(
+                        "Invalid 'since' date. Use the YYYY-MM-DD format and make sure the date is valid."
+                    )
 
-        if until:
-            if self._check_date_validity(until):
-                endpoint += f"&until={until}"
-            else:
-                raise ValueError(
-                    "Invalid 'until' date. Use the YYYY-MM-DD format and make sure the date is valid."
-                )
+            if until:
+                if self._check_date_validity(until):
+                    endpoint += f"&until={until}"
+                else:
+                    raise ValueError(
+                        "Invalid 'until' date. Use the YYYY-MM-DD format and make sure the date is valid."
+                    )
 
         if near:
             endpoint += f"&near={near}"
@@ -750,28 +815,9 @@ class Nitter:
                 endpoint += "?scroll=false"
 
         soup = self._get_page(endpoint, max_retries)
-
-        if soup.find("div", class_="error-item"):
-            if "Account is protected" in soup.find("div", class_="error-item").text:
-                logging.warning(
-                    f"Account {term} is protected. Try again with a different account."
-                )
-                return {"message": "Account is protected", "tweets": []}
-            elif "Account is suspended" in soup.find("div", class_="error-item").text:
-                logging.warning(
-                    f"Account {term} is suspended. Try again with a different account."
-                )
-                return {"message": "Account is suspended", "tweets": []}
-            elif "Empty page" in soup.find("div", class_="error-item").text:
-                logging.warning(
-                    f"Account {term} does not have any tweets."
-                )
-                return {"message": "Account does not have tweets", "tweets": []}
-            else:
-                logging.warning(
-                    f"Error getting {term}. Try again with a different account."
-                )
-                return {"message": "Account does not exist", "tweets": []}
+        response_check = self.check_for_errors(soup, term)
+        if response_check:
+            return response_check
 
         is_encrypted = self._is_instance_encrypted()
 
@@ -779,17 +825,43 @@ class Nitter:
 
         number = float("inf") if number == -1 else number
         keep_scraping = True
+        start_time = time.time()
+        min_date = None
+        max_date = None
+        params = None
+
+        if since:
+            min_date = datetime.strptime(since, "%Y-%m-%d").date()
+        if until:
+            max_date = datetime.strptime(until, "%Y-%m-%d").date()
+
         while keep_scraping:
+            if max_scraping_time:
+                if time.time() - start_time > max_scraping_time:
+                    keep_scraping = False
+                    break
+
             thread = []
 
             for tweet in soup.find_all("div", class_="timeline-item"):
                 if len(tweet["class"]) == 1:
                     to_append = self._extract_tweet(tweet, is_encrypted)
+                    # convert date key in to_append to datetime object from format like this: 'Jul 3, 2023 · 7:27 PM UTC'
+                    tweet_date = datetime.strptime(to_append['date'], '%b %d, %Y · %I:%M %p %Z').date()
                     # Extract tweets
                     if len(tweets["tweets"]) + len(tweets["threads"]) < number:
                         if self._get_tweet_link(tweet) not in already_scraped:
-                            tweets["tweets"].append(to_append)
-                            already_scraped.add(self._get_tweet_link(tweet))
+                            if no_search_mode:
+                                if tweet_date<=max_date:
+                                    if tweet_date>=min_date or to_append["is-retweet"]:
+                                        tweets["tweets"].append(to_append)
+                                        already_scraped.add(self._get_tweet_link(tweet))
+                                    else:
+                                        keep_scraping = False
+                                        break
+                            else:
+                                tweets["tweets"].append(to_append)
+                                already_scraped.add(self._get_tweet_link(tweet))
                     else:
                         keep_scraping = False
                         break
@@ -821,19 +893,27 @@ class Nitter:
                 show_more_buttons = soup.find_all("div", class_="show-more")
                 if soup.find_all("div", class_="show-more"):
                     if mode == "user":
-                        if since or until:
-                            next_page = (
-                                f"/{term}/search?"
-                                + show_more_buttons[-1].find("a")["href"].split("?")[-1]
-                            )
+                        if no_search_mode:
+                            cursor = show_more_buttons[-1].find("a")["href"].split("?")[-1].split("cursor=")[1]
+                            params = {
+                                "cursor": cursor,
+                                "since": "true"
+                            }
+                            next_page = endpoint
                         else:
-                            next_page = (
-                                f"/{term}?"
-                                + show_more_buttons[-1].find("a")["href"].split("?")[-1]
-                            )
+                            if since or until:
+                                next_page = (
+                                    f"/{term}/search?"
+                                    + show_more_buttons[-1].find("a")["href"].split("?")[-1]
+                                )
+                            else:
+                                next_page = (
+                                    f"/{term}?"
+                                    + show_more_buttons[-1].find("a")["href"].split("?")[-1]
+                                )
                     else:
                         next_page = "/search" + show_more_buttons[-1].find("a")["href"]
-                    soup = self._get_page(next_page, max_retries)
+                    soup = self._get_page(next_page, max_retries, params)
                     if soup is None:
                         keep_scraping = False
                 else:
@@ -851,6 +931,37 @@ class Nitter:
         """
         return random.choice(self.working_instances)
 
+    def get_user_tweet(
+        self,
+        username,
+        tweet_id,
+        instance=None,
+    ):
+        """
+        Scrape a specific tweet from Nitter
+
+        :param username: username of the page to scrape
+        :param tweet_id: ID of the tweet to scrape
+        :return: dictionary of the tweet
+        """
+        self._initialize_session(instance)
+        username = sub(r"[^A-Za-z0-9_+-:]", "", username)
+        soup = self._get_page(f"/{username}/status/{tweet_id}")
+        if soup is None:
+            return None
+
+        response_check = self.check_for_errors(soup, username)
+        if response_check:
+            return response_check
+
+        is_encrypted = self._is_instance_encrypted()
+
+        tweet = soup.find("div", class_="timeline-item")
+        if tweet is None:
+            return None
+
+        return self._extract_tweet(tweet, is_encrypted)
+
     def get_tweets(
         self,
         terms,
@@ -865,6 +976,8 @@ class Nitter:
         exclude=None,
         max_retries=5,
         instance=None,
+        max_scraping_time = None,
+        no_search_mode = False
     ):
         """
         Scrape the specified term from Nitter
@@ -881,6 +994,7 @@ class Nitter:
         :param exclude: list of filters to exclude. Default is None
         :param max_retries: max retries to scrape a page. Default is 5
         :param instance: Nitter instance to use. Default is None
+        :param max_scraping_time: Maximum amount of time to scrape tweets for
         :return: dictionary or array with dictionaries (in case of multiple terms) of the tweets and threads for the provided terms
         """
         if type(terms) == str:
@@ -899,6 +1013,8 @@ class Nitter:
                 exclude,
                 max_retries,
                 instance,
+                max_scraping_time,
+                no_search_mode
             )
         elif len(terms) == 1:
             term = sub(r"[^A-Za-z0-9_+-:]", " ", terms[0]).replace("  ", " ").strip()
@@ -916,6 +1032,8 @@ class Nitter:
                 exclude,
                 max_retries,
                 instance,
+                max_scraping_time,
+                no_search_mode
             )
         else:
             term = sub(r"[^A-Za-z0-9_+-:]", " ", terms[0]).replace("  ", " ").strip()
@@ -933,6 +1051,8 @@ class Nitter:
                 exclude,
                 max_retries,
                 instance,
+                max_scraping_time,
+                no_search_mode
             )
 
     def get_profile_info(self, username, max_retries=5, instance=None):
