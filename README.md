@@ -111,3 +111,4 @@ Due to recent changes on Twitter's side, some Nitter instances may not work prop
     - If an account is protected, the returned message in response is: "Account is protected"
     - If an account doesn't have tweets in the specified duration, the returned message is: "Account does not have tweets"
     - Otherwise, the returned message is: "Account does not exist"
+- Now you can scrape a single tweet using fn call: get_user_tweet(user_name, tweet_id, instance)
